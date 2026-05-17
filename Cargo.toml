@@ -1,0 +1,33 @@
+[workspace]
+members = [
+    "crates/gofilepan-core",
+    "crates/gofilepan-cli",
+    "crates/gofilepan-gui",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/yoefun/GofilePan"
+
+[workspace.dependencies]
+anyhow = "1.0"
+async-recursion = "1.1"
+clap = { version = "4.5", features = ["derive", "env"] }
+dirs = "5.0"
+eframe = "0.27"
+egui = "0.27"
+futures-util = "0.3"
+hex = "0.4"
+reqwest = { version = "0.12", features = ["json", "stream", "cookies", "gzip"] }
+rfd = "0.14"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+tempfile = "3.10"
+thiserror = "1.0"
+tokio = { version = "1.37", features = ["fs", "io-util", "macros", "rt-multi-thread", "signal", "sync", "time"] }
+toml = "0.8"
+url = "2.5"
+

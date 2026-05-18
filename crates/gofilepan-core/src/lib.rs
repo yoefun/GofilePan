@@ -557,7 +557,7 @@ impl DownloadManager {
                     last_error = Some(error);
                     let _ = self.events.send(DownloadEvent::Retry {
                         index: Some(file.index),
-                        message: format!("retrying {}", file.filename),
+                        message: format!("retrying {}: {}", file.filename, last_error.as_ref().unwrap()),
                         attempt,
                     });
                     sleep(retry_delay(attempt)).await;
@@ -579,51 +579,77 @@ impl DownloadManager {
         destination: &Path,
         part_file: &Path,
     ) -> Result<()> {
-        let part_size = fs::metadata(part_file).await.map(|m| m.len()).unwrap_or(0);
-        let mut request = self.client.get(&file.url);
-        if let Some(account_token) = self.account_token.lock().await.clone() {
-            request = request
-                .bearer_auth(&account_token)
-                .header(COOKIE, format!("accountToken={account_token}"));
-        }
-        if part_size > 0 {
-            request = request.header(RANGE, format!("bytes={part_size}-"));
-        }
+        let mut restarted_without_resume = false;
 
-        let response = request.send().await?;
-        let status = response.status();
-        if !is_valid_download_status(status, part_size) {
-            return Err(DownloadError::BadStatus(status));
-        }
+        loop {
+            let part_size = if restarted_without_resume {
+                0
+            } else {
+                fs::metadata(part_file).await.map(|m| m.len()).unwrap_or(0)
+            };
 
-        let total_size = extract_total_size(response.headers(), part_size)
-            .ok_or(DownloadError::MissingFileSize)?;
-        let _ = self.events.send(DownloadEvent::Started {
-            index: file.index,
-            path: destination.to_path_buf(),
-        });
-
-        let mut output = fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(part_file)
-            .await?;
-        let mut downloaded = part_size;
-        let mut stream = response.bytes_stream();
-        let mut buffered = Vec::with_capacity(self.config.chunk_size);
-
-        while let Some(chunk) = stream.next().await {
-            if self.cancelled.load(Ordering::SeqCst) {
-                return Err(DownloadError::Cancelled);
+            let mut request = self.client.get(&file.url);
+            if let Some(account_token) = self.account_token.lock().await.clone() {
+                request = request
+                    .bearer_auth(&account_token)
+                    .header(COOKIE, format!("accountToken={account_token}"));
+            }
+            if part_size > 0 {
+                request = request.header(RANGE, format!("bytes={part_size}-"));
             }
 
-            let chunk = chunk?;
-            buffered.extend_from_slice(&chunk);
-            while buffered.len() >= self.config.chunk_size {
-                let tail = buffered.split_off(self.config.chunk_size);
+            let response = request.send().await?;
+            let status = response.status();
+
+            if part_size > 0 && status == StatusCode::OK {
+                let _ = fs::remove_file(part_file).await;
+                restarted_without_resume = true;
+                continue;
+            }
+
+            if !is_valid_download_status(status, part_size) {
+                return Err(DownloadError::BadStatus(status));
+            }
+
+            let total_size = extract_total_size(response.headers(), part_size)
+                .ok_or(DownloadError::MissingFileSize)?;
+            let _ = self.events.send(DownloadEvent::Started {
+                index: file.index,
+                path: destination.to_path_buf(),
+            });
+
+            let mut output = fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(part_file)
+                .await?;
+            let mut downloaded = part_size;
+            let mut stream = response.bytes_stream();
+            let mut buffered = Vec::with_capacity(self.config.chunk_size);
+
+            while let Some(chunk) = stream.next().await {
+                if self.cancelled.load(Ordering::SeqCst) {
+                    return Err(DownloadError::Cancelled);
+                }
+
+                let chunk = chunk?;
+                buffered.extend_from_slice(&chunk);
+                while buffered.len() >= self.config.chunk_size {
+                    let tail = buffered.split_off(self.config.chunk_size);
+                    output.write_all(&buffered).await?;
+                    downloaded += buffered.len() as u64;
+                    buffered = tail;
+                    let _ = self.events.send(DownloadEvent::Progress {
+                        index: file.index,
+                        path: destination.to_path_buf(),
+                        downloaded,
+                        total: total_size,
+                    });
+                }
+            }
+            if !buffered.is_empty() {
                 output.write_all(&buffered).await?;
                 downloaded += buffered.len() as u64;
-                buffered = tail;
                 let _ = self.events.send(DownloadEvent::Progress {
                     index: file.index,
                     path: destination.to_path_buf(),
@@ -631,30 +657,20 @@ impl DownloadManager {
                     total: total_size,
                 });
             }
-        }
-        if !buffered.is_empty() {
-            output.write_all(&buffered).await?;
-            downloaded += buffered.len() as u64;
-            let _ = self.events.send(DownloadEvent::Progress {
-                index: file.index,
-                path: destination.to_path_buf(),
-                downloaded,
-                total: total_size,
-            });
-        }
-        output.flush().await?;
+            output.flush().await?;
 
-        let actual_size = fs::metadata(part_file).await?.len();
-        if actual_size == total_size {
-            fs::rename(part_file, destination).await?;
-            let _ = self.events.send(DownloadEvent::Completed {
-                index: file.index,
-                path: destination.to_path_buf(),
-                bytes: actual_size,
-            });
-            Ok(())
-        } else {
-            Err(DownloadError::MissingFileSize)
+            let actual_size = fs::metadata(part_file).await?.len();
+            if actual_size == total_size {
+                fs::rename(part_file, destination).await?;
+                let _ = self.events.send(DownloadEvent::Completed {
+                    index: file.index,
+                    path: destination.to_path_buf(),
+                    bytes: actual_size,
+                });
+                return Ok(());
+            } else {
+                return Err(DownloadError::MissingFileSize);
+            }
         }
     }
 }
@@ -799,18 +815,21 @@ pub fn is_valid_download_status(status: StatusCode, part_size: u64) -> bool {
 }
 
 pub fn extract_total_size(headers: &HeaderMap, part_size: u64) -> Option<u64> {
-    if part_size == 0 {
-        return headers
-            .get("Content-Length")
-            .and_then(|value| value.to_str().ok())
-            .and_then(|value| value.parse().ok());
-    }
+    let content_length = headers
+        .get("Content-Length")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.parse::<u64>().ok());
 
-    headers
+    let content_range_total = headers
         .get("Content-Range")
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.rsplit('/').next())
-        .and_then(|value| value.parse().ok())
+        .and_then(|value| value.parse::<u64>().ok());
+
+    match part_size {
+        0 => content_length.or(content_range_total),
+        _ => content_range_total.or_else(|| content_length.map(|len| part_size + len)),
+    }
 }
 
 fn retry_delay(attempt: usize) -> Duration {
@@ -890,6 +909,10 @@ mod tests {
 
         let mut headers = HeaderMap::new();
         headers.insert("Content-Range", HeaderValue::from_static("bytes 10-41/42"));
+        assert_eq!(extract_total_size(&headers, 10), Some(42));
+
+        let mut headers = HeaderMap::new();
+        headers.insert("Content-Length", HeaderValue::from_static("32"));
         assert_eq!(extract_total_size(&headers, 10), Some(42));
     }
 }

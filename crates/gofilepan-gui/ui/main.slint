@@ -201,6 +201,28 @@ component LogRow inherits Rectangle {
     }
 }
 
+component AppButton inherits Rectangle {
+    in property <string> label;
+    in property <bool> button-primary: false;
+    in property <bool> button-enabled: true;
+    callback activated();
+
+    width: 120px;
+    height: 40px;
+    background: transparent;
+
+    Button {
+        width: parent.width;
+        height: parent.height;
+        text: root.label;
+        primary: root.button-primary;
+        enabled: root.button-enabled;
+        clicked => {
+            root.activated();
+        }
+    }
+}
+
 export component MainWindow inherits Window {
     width: 1280px;
     height: 860px;
@@ -269,7 +291,7 @@ export component MainWindow inherits Window {
                     }
 
                     Text {
-                        text: root.t("Slint desktop downloader", "Slint desktop downloader");
+                        text: root.t("Slint 桌面下载器", "Slint desktop downloader");
                         color: Palette.foreground;
                         opacity: 0.7;
                         font-size: 12px;
@@ -294,7 +316,7 @@ export component MainWindow inherits Window {
                 }
 
                 Switch {
-                    text: root.t("Advanced", "Advanced");
+                    text: root.t("高级", "Advanced");
                     checked <=> root.advanced_open;
                 }
             }
@@ -309,15 +331,15 @@ export component MainWindow inherits Window {
                 spacing: 16px;
 
                 GroupBox {
-                    title: root.t("Mission Control", "Mission Control");
+                    title: root.t("任务控制", "Mission Control");
                     content-padding: 14px;
 
                     VerticalBox {
-                        spacing: 10px;
+                        spacing: 12px;
 
                         Text {
                             text: root.t(
-                                "Paste a Gofile URL or batch lines",
+                                "粘贴 Gofile 链接或批量文本",
                                 "Paste a Gofile URL or batch lines",
                             );
                             color: Palette.foreground;
@@ -336,53 +358,53 @@ export component MainWindow inherits Window {
                         }
 
                         HorizontalBox {
-                            spacing: 8px;
+                            spacing: 10px;
 
                             LineEdit {
                                 text <=> root.password_input;
-                                placeholder-text: root.t("Password", "Password");
+                                placeholder-text: root.t("密码", "Password");
                                 input-type: password;
                                 horizontal-stretch: 1;
                             }
 
-                            Button {
-                                text: root.t("Discover", "Discover");
-                                enabled: !root.busy;
-                                clicked => {
+                            AppButton {
+                                label: root.t("探测", "Discover");
+                                button-enabled: !root.busy;
+                                activated => {
                                     root.request_discover();
                                 }
                             }
 
-                            Button {
-                                text: root.t("Start", "Start");
-                                enabled: !root.busy;
-                                primary: true;
-                                clicked => {
+                            AppButton {
+                                label: root.t("开始", "Start");
+                                button-enabled: !root.busy;
+                                button-primary: true;
+                                activated => {
                                     root.request_start();
                                 }
                             }
 
-                            Button {
-                                text: root.t("Cancel", "Cancel");
-                                enabled: root.busy;
-                                clicked => {
+                            AppButton {
+                                label: root.t("取消", "Cancel");
+                                button-enabled: root.busy;
+                                activated => {
                                     root.request_cancel();
                                 }
                             }
                         }
 
                         HorizontalBox {
-                            spacing: 12px;
+                            spacing: 18px;
 
                             Text {
-                                text: root.t("Files", "Files") + ": " + root.files_count;
+                                text: root.t("文件", "Files") + ": " + root.files_count;
                                 color: Palette.foreground;
                                 opacity: 0.78;
                                 font-size: 11px;
                             }
 
                             Text {
-                                text: root.t("Selected", "Selected") + ": " + root.selected_count;
+                                text: root.t("已选", "Selected") + ": " + root.selected_count;
                                 color: Palette.foreground;
                                 opacity: 0.78;
                                 font-size: 11px;
@@ -401,24 +423,24 @@ export component MainWindow inherits Window {
                     vertical-stretch: 1;
 
                     Tab {
-                        title: root.t("Files", "Files");
+                        title: root.t("文件", "Files");
 
                         VerticalBox {
-                            spacing: 10px;
+                            spacing: 12px;
 
                             HorizontalBox {
-                                spacing: 8px;
+                                spacing: 10px;
 
-                                Button {
-                                    text: root.t("Select all", "Select all");
-                                    clicked => {
+                                AppButton {
+                                    label: root.t("全选", "Select all");
+                                    activated => {
                                         root.request_select_all();
                                     }
                                 }
 
-                                Button {
-                                    text: root.t("Select none", "Select none");
-                                    clicked => {
+                                AppButton {
+                                    label: root.t("全不选", "Select none");
+                                    activated => {
                                         root.request_select_none();
                                     }
                                 }
@@ -429,7 +451,7 @@ export component MainWindow inherits Window {
                                 }
 
                                 Text {
-                                    text: root.t("Selected", "Selected")
+                                    text: root.t("已选", "Selected")
                                         + ": "
                                         + root.selected_count
                                         + " / "
@@ -442,8 +464,8 @@ export component MainWindow inherits Window {
 
                             if root.files_count == 0 : EmptyState {
                                 message: root.busy
-                                    ? root.t("Discovering files...", "Discovering files...")
-                                    : root.t("No files discovered yet", "No files discovered yet");
+                                    ? root.t("正在探测文件...", "Discovering files...")
+                                    : root.t("尚未探测到文件", "No files discovered yet");
                             }
 
                             if root.files_count > 0 : ListView {
@@ -462,15 +484,15 @@ export component MainWindow inherits Window {
                     }
 
                     Tab {
-                        title: root.t("Progress", "Progress");
+                        title: root.t("进度", "Progress");
 
                         VerticalBox {
-                            spacing: 10px;
+                            spacing: 12px;
 
                             if root.progress_count == 0 : EmptyState {
                                 message: root.busy
-                                    ? root.t("Waiting for progress...", "Waiting for progress...")
-                                    : root.t("No active downloads yet", "No active downloads yet");
+                                    ? root.t("正在等待进度...", "Waiting for progress...")
+                                    : root.t("暂无下载任务", "No active downloads yet");
                             }
 
                             if root.progress_count > 0 : ListView {
@@ -489,17 +511,17 @@ export component MainWindow inherits Window {
                     }
 
                     Tab {
-                        title: root.t("Log", "Log");
+                        title: root.t("日志", "Log");
 
                         VerticalBox {
-                            spacing: 10px;
+                            spacing: 12px;
 
                             HorizontalBox {
-                                spacing: 8px;
+                                spacing: 10px;
 
-                                Button {
-                                    text: root.t("Clear logs", "Clear logs");
-                                    clicked => {
+                                AppButton {
+                                    label: root.t("清空日志", "Clear logs");
+                                    activated => {
                                         root.request_clear_logs();
                                     }
                                 }
@@ -510,7 +532,7 @@ export component MainWindow inherits Window {
                                 }
 
                                 Text {
-                                    text: root.t("Recent activity", "Recent activity");
+                                    text: root.t("最近活动", "Recent activity");
                                     color: Palette.foreground;
                                     opacity: 0.72;
                                     font-size: 11px;
@@ -518,7 +540,7 @@ export component MainWindow inherits Window {
                             }
 
                             if root.logs_count == 0 : EmptyState {
-                                message: root.t("No logs yet", "No logs yet");
+                                message: root.t("暂无日志", "No logs yet");
                             }
 
                             if root.logs_count > 0 : ListView {
@@ -534,19 +556,19 @@ export component MainWindow inherits Window {
             }
 
             if root.advanced_open : GroupBox {
-                title: root.t("Advanced settings", "Advanced settings");
+                title: root.t("高级设置", "Advanced settings");
                 preferred-width: 360px;
                 content-padding: 14px;
 
                 VerticalBox {
-                    spacing: 10px;
+                    spacing: 12px;
 
                     HorizontalBox {
                         spacing: 10px;
 
                         Text {
-                            text: root.t("Download directory", "Download directory");
-                            width: 120px;
+                            text: root.t("下载目录", "Download directory");
+                            width: 110px;
                             color: Palette.foreground;
                             opacity: 0.78;
                             font-size: 11px;
@@ -555,12 +577,12 @@ export component MainWindow inherits Window {
                         LineEdit {
                             text <=> root.download_dir;
                             horizontal-stretch: 1;
-                            placeholder-text: root.t("Choose a folder", "Choose a folder");
+                            placeholder-text: root.t("选择文件夹", "Choose a folder");
                         }
 
-                        Button {
-                            text: root.t("...", "...");
-                            clicked => {
+                        AppButton {
+                            label: root.t("浏览", "Browse");
+                            activated => {
                                 root.request_pick_folder();
                             }
                         }
@@ -570,8 +592,8 @@ export component MainWindow inherits Window {
                         spacing: 10px;
 
                         Text {
-                            text: root.t("Token", "Token");
-                            width: 120px;
+                            text: root.t("令牌", "Token");
+                            width: 110px;
                             color: Palette.foreground;
                             opacity: 0.78;
                             font-size: 11px;
@@ -580,7 +602,7 @@ export component MainWindow inherits Window {
                         LineEdit {
                             text <=> root.token_input;
                             horizontal-stretch: 1;
-                            placeholder-text: root.t("Optional", "Optional");
+                            placeholder-text: root.t("可选", "Optional");
                         }
                     }
 
@@ -588,8 +610,8 @@ export component MainWindow inherits Window {
                         spacing: 10px;
 
                         Text {
-                            text: root.t("User agent", "User agent");
-                            width: 120px;
+                            text: root.t("User-Agent", "User agent");
+                            width: 110px;
                             color: Palette.foreground;
                             opacity: 0.78;
                             font-size: 11px;
@@ -606,8 +628,8 @@ export component MainWindow inherits Window {
                         spacing: 10px;
 
                         Text {
-                            text: root.t("Concurrent", "Concurrent");
-                            width: 120px;
+                            text: root.t("并发数", "Concurrent");
+                            width: 110px;
                             color: Palette.foreground;
                             opacity: 0.78;
                             font-size: 11px;
@@ -626,8 +648,8 @@ export component MainWindow inherits Window {
                         spacing: 10px;
 
                         Text {
-                            text: root.t("Retries", "Retries");
-                            width: 120px;
+                            text: root.t("重试次数", "Retries");
+                            width: 110px;
                             color: Palette.foreground;
                             opacity: 0.78;
                             font-size: 11px;
@@ -646,8 +668,8 @@ export component MainWindow inherits Window {
                         spacing: 10px;
 
                         Text {
-                            text: root.t("Timeout (s)", "Timeout (s)");
-                            width: 120px;
+                            text: root.t("超时（秒）", "Timeout (s)");
+                            width: 110px;
                             color: Palette.foreground;
                             opacity: 0.78;
                             font-size: 11px;
@@ -664,8 +686,8 @@ export component MainWindow inherits Window {
                         spacing: 10px;
 
                         Text {
-                            text: root.t("Chunk size", "Chunk size");
-                            width: 120px;
+                            text: root.t("分块大小", "Chunk size");
+                            width: 110px;
                             color: Palette.foreground;
                             opacity: 0.78;
                             font-size: 11px;
@@ -684,8 +706,8 @@ export component MainWindow inherits Window {
                         spacing: 10px;
 
                         Text {
-                            text: root.t("Language", "Language");
-                            width: 120px;
+                            text: root.t("语言", "Language");
+                            width: 110px;
                             color: Palette.foreground;
                             opacity: 0.78;
                             font-size: 11px;
@@ -694,21 +716,21 @@ export component MainWindow inherits Window {
                         ComboBox {
                             current-index <=> root.language_index;
                             model: [
-                                root.t("System / 系统", "System"),
+                                root.t("系统 / System", "System"),
                                 root.t("中文", "Chinese"),
                                 root.t("English", "English"),
                             ];
                             horizontal-stretch: 1;
-                            selected(value) => {
-                                root.language_changed(value);
-                            }
+                            changed current-index => {
+                                root.language_changed(self.current-value);
+                            };
                         }
                     }
 
-                    Button {
-                        text: root.t("Save settings", "Save settings");
-                        primary: true;
-                        clicked => {
+                    AppButton {
+                        label: root.t("保存设置", "Save settings");
+                        button-primary: true;
+                        activated => {
                             root.request_save_settings();
                         }
                     }

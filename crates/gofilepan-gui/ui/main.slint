@@ -1,0 +1,719 @@
+import {
+    Button,
+    CheckBox,
+    ComboBox,
+    GroupBox,
+    LineEdit,
+    ListView,
+    Spinner,
+    SpinBox,
+    Switch,
+    TabWidget,
+    TextEdit,
+    VerticalBox,
+    HorizontalBox,
+    Palette,
+} from "std-widgets.slint";
+
+export struct FileItem {
+    index: int,
+    title: string,
+    checked: bool,
+}
+
+export struct ProgressItem {
+    index: int,
+    title: string,
+    kind: int,
+    status: string,
+    detail: string,
+    fraction: float,
+    accent: color,
+}
+
+component StatusBadge inherits Rectangle {
+    in property <string> text;
+    in property <color> accent;
+
+    height: 28px;
+    border-radius: 14px;
+    border-width: 1px;
+    border-color: accent;
+    background: Palette.control-background;
+
+    HorizontalBox {
+        padding: 8px;
+        alignment: center;
+
+        Text {
+            text: root.text;
+            color: accent;
+            font-size: 11px;
+        }
+    }
+}
+
+component EmptyState inherits Rectangle {
+    in property <string> message;
+
+    height: 100%;
+    border-radius: 10px;
+    border-width: 1px;
+    border-color: Palette.border;
+    background: Palette.control-background;
+
+    VerticalBox {
+        alignment: center;
+
+        Text {
+            text: root.message;
+            color: Palette.foreground;
+            opacity: 0.62;
+            font-size: 12px;
+        }
+    }
+}
+
+component FileRow inherits Rectangle {
+    in-out property <bool> checked;
+    in property <int> index;
+    in property <string> title;
+    callback toggled(bool);
+
+    height: 56px;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: Palette.border;
+    background: Math.mod(index, 2) == 0 ? Palette.background : Palette.control-background;
+
+    HorizontalBox {
+        padding: 12px;
+        spacing: 10px;
+
+        CheckBox {
+            text: "";
+            checked: root.checked;
+            toggled => {
+                root.toggled(self.checked);
+            }
+        }
+
+        VerticalBox {
+            spacing: 2px;
+
+            Text {
+                text: "[" + root.index + "]";
+                color: Palette.foreground;
+                opacity: 0.72;
+                font-size: 11px;
+            }
+
+            Text {
+                text: root.title;
+                color: Palette.foreground;
+                overflow: elide;
+            }
+        }
+    }
+}
+
+component ProgressRow inherits Rectangle {
+    in property <int> index;
+    in property <string> title;
+    in property <string> status;
+    in property <string> detail;
+    in property <float> fraction;
+    in property <color> accent;
+
+    height: 74px;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: Palette.border;
+    background: Palette.control-background;
+
+    VerticalBox {
+        padding: 12px;
+        spacing: 8px;
+
+        HorizontalBox {
+            spacing: 10px;
+
+            VerticalBox {
+                spacing: 2px;
+                horizontal-stretch: 1;
+
+                Text {
+                    text: "[" + root.index + "] " + root.title;
+                    color: Palette.foreground;
+                    overflow: elide;
+                }
+
+                Text {
+                    text: root.detail;
+                    color: Palette.foreground;
+                    opacity: 0.68;
+                    font-size: 11px;
+                }
+            }
+
+            StatusBadge {
+                text: root.status;
+                accent: root.accent;
+            }
+        }
+
+        Rectangle {
+            height: 6px;
+            border-radius: 999px;
+            background: Palette.border;
+
+            Rectangle {
+                width: parent.width * root.fraction;
+                height: parent.height;
+                border-radius: 999px;
+                background: root.accent;
+                animate width {
+                    duration: 160ms;
+                    easing: ease-out;
+                }
+            }
+        }
+    }
+}
+
+component LogRow inherits Rectangle {
+    in property <string> text;
+
+    height: 30px;
+    border-radius: 6px;
+    background: transparent;
+
+    HorizontalBox {
+        padding: 6px;
+
+        Text {
+            text: root.text;
+            color: Palette.foreground;
+            opacity: 0.78;
+            overflow: elide;
+            font-size: 11px;
+        }
+    }
+}
+
+export component MainWindow inherits Window {
+    width: 1280px;
+    height: 860px;
+    background: Palette.background;
+
+    in-out property <bool> chinese: false;
+    in-out property <int> language_index: 0;
+    in-out property <string> url_input: "";
+    in-out property <string> password_input: "";
+    in-out property <string> download_dir: "";
+    in-out property <string> token_input: "";
+    in-out property <string> user_agent_input: "";
+    in-out property <string> timeout_seconds_input: "";
+    in-out property <int> max_concurrent: 5;
+    in-out property <int> retries: 5;
+    in-out property <int> chunk_size: 2097152;
+    in-out property <bool> advanced_open: false;
+    in-out property <bool> busy: false;
+    in-out property <string> status_text: "";
+    in-out property <color> status_color: #35d3ff;
+    in-out property <int> files_count: 0;
+    in-out property <int> progress_count: 0;
+    in-out property <int> logs_count: 0;
+    in-out property <int> selected_count: 0;
+    in-out property <[FileItem]> files: [];
+    in-out property <[ProgressItem]> progresses: [];
+    in-out property <[string]> logs: [];
+
+    callback request_discover();
+    callback request_start();
+    callback request_cancel();
+    callback request_save_settings();
+    callback request_pick_folder();
+    callback request_clear_logs();
+    callback request_select_all();
+    callback request_select_none();
+    callback file_toggled(int, bool);
+    callback language_changed(string);
+
+    pure function t(zh: string, en: string) -> string {
+        return root.chinese ? zh : en;
+    }
+
+    VerticalBox {
+        padding: 16px;
+        spacing: 16px;
+
+        Rectangle {
+            height: 72px;
+            border-radius: 10px;
+            border-width: 1px;
+            border-color: Palette.border;
+            background: Palette.control-background;
+
+            HorizontalBox {
+                padding: 16px;
+                spacing: 16px;
+
+                VerticalBox {
+                    spacing: 4px;
+
+                    Text {
+                        text: "GofilePan";
+                        color: Palette.foreground;
+                        font-size: 24px;
+                    }
+
+                    Text {
+                        text: root.t("Slint desktop downloader", "Slint desktop downloader");
+                        color: Palette.foreground;
+                        opacity: 0.7;
+                        font-size: 12px;
+                    }
+                }
+
+                Rectangle {
+                    horizontal-stretch: 1;
+                    background: transparent;
+                }
+
+                Spinner {
+                    visible: root.busy;
+                    width: 18px;
+                    height: 18px;
+                    indeterminate: true;
+                }
+
+                StatusBadge {
+                    text: root.status_text;
+                    accent: root.status_color;
+                }
+
+                Switch {
+                    text: root.t("Advanced", "Advanced");
+                    checked <=> root.advanced_open;
+                }
+            }
+        }
+
+        HorizontalBox {
+            spacing: 16px;
+            vertical-stretch: 1;
+
+            VerticalBox {
+                horizontal-stretch: 1;
+                spacing: 16px;
+
+                GroupBox {
+                    title: root.t("Mission Control", "Mission Control");
+                    content-padding: 14px;
+
+                    VerticalBox {
+                        spacing: 10px;
+
+                        Text {
+                            text: root.t(
+                                "Paste a Gofile URL or batch lines",
+                                "Paste a Gofile URL or batch lines",
+                            );
+                            color: Palette.foreground;
+                            opacity: 0.72;
+                            font-size: 12px;
+                        }
+
+                        TextEdit {
+                            text <=> root.url_input;
+                            placeholder-text: root.t(
+                                "https://gofile.io/d/...",
+                                "https://gofile.io/d/...",
+                            );
+                            wrap: word-wrap;
+                            height: 118px;
+                        }
+
+                        HorizontalBox {
+                            spacing: 8px;
+
+                            LineEdit {
+                                text <=> root.password_input;
+                                placeholder-text: root.t("Password", "Password");
+                                input-type: password;
+                                horizontal-stretch: 1;
+                            }
+
+                            Button {
+                                text: root.t("Discover", "Discover");
+                                enabled: !root.busy;
+                                clicked => {
+                                    root.request_discover();
+                                }
+                            }
+
+                            Button {
+                                text: root.t("Start", "Start");
+                                enabled: !root.busy;
+                                primary: true;
+                                clicked => {
+                                    root.request_start();
+                                }
+                            }
+
+                            Button {
+                                text: root.t("Cancel", "Cancel");
+                                enabled: root.busy;
+                                clicked => {
+                                    root.request_cancel();
+                                }
+                            }
+                        }
+
+                        HorizontalBox {
+                            spacing: 12px;
+
+                            Text {
+                                text: root.t("Files", "Files") + ": " + root.files_count;
+                                color: Palette.foreground;
+                                opacity: 0.78;
+                                font-size: 11px;
+                            }
+
+                            Text {
+                                text: root.t("Selected", "Selected") + ": " + root.selected_count;
+                                color: Palette.foreground;
+                                opacity: 0.78;
+                                font-size: 11px;
+                            }
+
+                            Rectangle {
+                                horizontal-stretch: 1;
+                                background: transparent;
+                            }
+                        }
+                    }
+                }
+
+                TabWidget {
+                    horizontal-stretch: 1;
+                    vertical-stretch: 1;
+
+                    Tab {
+                        title: root.t("Files", "Files");
+
+                        VerticalBox {
+                            spacing: 10px;
+
+                            HorizontalBox {
+                                spacing: 8px;
+
+                                Button {
+                                    text: root.t("Select all", "Select all");
+                                    clicked => {
+                                        root.request_select_all();
+                                    }
+                                }
+
+                                Button {
+                                    text: root.t("Select none", "Select none");
+                                    clicked => {
+                                        root.request_select_none();
+                                    }
+                                }
+
+                                Rectangle {
+                                    horizontal-stretch: 1;
+                                    background: transparent;
+                                }
+
+                                Text {
+                                    text: root.t("Selected", "Selected")
+                                        + ": "
+                                        + root.selected_count
+                                        + " / "
+                                        + root.files_count;
+                                    color: Palette.foreground;
+                                    opacity: 0.72;
+                                    font-size: 11px;
+                                }
+                            }
+
+                            if root.files_count == 0 : EmptyState {
+                                message: root.busy
+                                    ? root.t("Discovering files...", "Discovering files...")
+                                    : root.t("No files discovered yet", "No files discovered yet");
+                            }
+
+                            if root.files_count > 0 : ListView {
+                                vertical-stretch: 1;
+
+                                for file[index] in root.files : FileRow {
+                                    index: file.index;
+                                    title: file.title;
+                                    checked: file.checked;
+                                    toggled(checked) => {
+                                        root.file_toggled(file.index, checked);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Tab {
+                        title: root.t("Progress", "Progress");
+
+                        VerticalBox {
+                            spacing: 10px;
+
+                            if root.progress_count == 0 : EmptyState {
+                                message: root.busy
+                                    ? root.t("Waiting for progress...", "Waiting for progress...")
+                                    : root.t("No active downloads yet", "No active downloads yet");
+                            }
+
+                            if root.progress_count > 0 : ListView {
+                                vertical-stretch: 1;
+
+                                for progress[index] in root.progresses : ProgressRow {
+                                    index: progress.index;
+                                    title: progress.title;
+                                    status: progress.status;
+                                    detail: progress.detail;
+                                    fraction: progress.fraction;
+                                    accent: progress.accent;
+                                }
+                            }
+                        }
+                    }
+
+                    Tab {
+                        title: root.t("Log", "Log");
+
+                        VerticalBox {
+                            spacing: 10px;
+
+                            HorizontalBox {
+                                spacing: 8px;
+
+                                Button {
+                                    text: root.t("Clear logs", "Clear logs");
+                                    clicked => {
+                                        root.request_clear_logs();
+                                    }
+                                }
+
+                                Rectangle {
+                                    horizontal-stretch: 1;
+                                    background: transparent;
+                                }
+
+                                Text {
+                                    text: root.t("Recent activity", "Recent activity");
+                                    color: Palette.foreground;
+                                    opacity: 0.72;
+                                    font-size: 11px;
+                                }
+                            }
+
+                            if root.logs_count == 0 : EmptyState {
+                                message: root.t("No logs yet", "No logs yet");
+                            }
+
+                            if root.logs_count > 0 : ListView {
+                                vertical-stretch: 1;
+
+                                for log[index] in root.logs : LogRow {
+                                    text: log;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if root.advanced_open : GroupBox {
+                title: root.t("Advanced settings", "Advanced settings");
+                preferred-width: 360px;
+                content-padding: 14px;
+
+                VerticalBox {
+                    spacing: 10px;
+
+                    HorizontalBox {
+                        spacing: 10px;
+
+                        Text {
+                            text: root.t("Download directory", "Download directory");
+                            width: 120px;
+                            color: Palette.foreground;
+                            opacity: 0.78;
+                            font-size: 11px;
+                        }
+
+                        LineEdit {
+                            text <=> root.download_dir;
+                            horizontal-stretch: 1;
+                            placeholder-text: root.t("Choose a folder", "Choose a folder");
+                        }
+
+                        Button {
+                            text: root.t("...", "...");
+                            clicked => {
+                                root.request_pick_folder();
+                            }
+                        }
+                    }
+
+                    HorizontalBox {
+                        spacing: 10px;
+
+                        Text {
+                            text: root.t("Token", "Token");
+                            width: 120px;
+                            color: Palette.foreground;
+                            opacity: 0.78;
+                            font-size: 11px;
+                        }
+
+                        LineEdit {
+                            text <=> root.token_input;
+                            horizontal-stretch: 1;
+                            placeholder-text: root.t("Optional", "Optional");
+                        }
+                    }
+
+                    HorizontalBox {
+                        spacing: 10px;
+
+                        Text {
+                            text: root.t("User agent", "User agent");
+                            width: 120px;
+                            color: Palette.foreground;
+                            opacity: 0.78;
+                            font-size: 11px;
+                        }
+
+                        LineEdit {
+                            text <=> root.user_agent_input;
+                            horizontal-stretch: 1;
+                            placeholder-text: root.t("Mozilla/5.0", "Mozilla/5.0");
+                        }
+                    }
+
+                    HorizontalBox {
+                        spacing: 10px;
+
+                        Text {
+                            text: root.t("Concurrent", "Concurrent");
+                            width: 120px;
+                            color: Palette.foreground;
+                            opacity: 0.78;
+                            font-size: 11px;
+                        }
+
+                        SpinBox {
+                            value <=> root.max_concurrent;
+                            minimum: 1;
+                            maximum: 32;
+                            step-size: 1;
+                            horizontal-stretch: 1;
+                        }
+                    }
+
+                    HorizontalBox {
+                        spacing: 10px;
+
+                        Text {
+                            text: root.t("Retries", "Retries");
+                            width: 120px;
+                            color: Palette.foreground;
+                            opacity: 0.78;
+                            font-size: 11px;
+                        }
+
+                        SpinBox {
+                            value <=> root.retries;
+                            minimum: 1;
+                            maximum: 20;
+                            step-size: 1;
+                            horizontal-stretch: 1;
+                        }
+                    }
+
+                    HorizontalBox {
+                        spacing: 10px;
+
+                        Text {
+                            text: root.t("Timeout (s)", "Timeout (s)");
+                            width: 120px;
+                            color: Palette.foreground;
+                            opacity: 0.78;
+                            font-size: 11px;
+                        }
+
+                        LineEdit {
+                            text <=> root.timeout_seconds_input;
+                            input-type: decimal;
+                            horizontal-stretch: 1;
+                        }
+                    }
+
+                    HorizontalBox {
+                        spacing: 10px;
+
+                        Text {
+                            text: root.t("Chunk size", "Chunk size");
+                            width: 120px;
+                            color: Palette.foreground;
+                            opacity: 0.78;
+                            font-size: 11px;
+                        }
+
+                        SpinBox {
+                            value <=> root.chunk_size;
+                            minimum: 1024;
+                            maximum: 16777216;
+                            step-size: 1024;
+                            horizontal-stretch: 1;
+                        }
+                    }
+
+                    HorizontalBox {
+                        spacing: 10px;
+
+                        Text {
+                            text: root.t("Language", "Language");
+                            width: 120px;
+                            color: Palette.foreground;
+                            opacity: 0.78;
+                            font-size: 11px;
+                        }
+
+                        ComboBox {
+                            current-index <=> root.language_index;
+                            model: [
+                                root.t("System / 系统", "System"),
+                                root.t("中文", "Chinese"),
+                                root.t("English", "English"),
+                            ];
+                            horizontal-stretch: 1;
+                            selected(value) => {
+                                root.language_changed(value);
+                            }
+                        }
+                    }
+
+                    Button {
+                        text: root.t("Save settings", "Save settings");
+                        primary: true;
+                        clicked => {
+                            root.request_save_settings();
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

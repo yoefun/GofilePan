@@ -27,7 +27,7 @@ GofilePan is a Rust downloader for [Gofile](https://gofile.io) with both a comma
 crates/
   gofilepan-core/  Shared Gofile API, planning, download, retry, resume, and event logic
   gofilepan-cli/   Command-line application
-  gofilepan-gui/   egui/eframe desktop application
+  gofilepan-gui/   Slint desktop application
 ```
 
 ## Requirements
@@ -42,7 +42,7 @@ Install Rust with [rustup](https://rustup.rs/) if `cargo` is not already availab
 rustup default stable
 ```
 
-Linux GUI builds may require common desktop packages for `eframe`/`winit`, such as X11, Wayland, OpenGL, and fontconfig development libraries.
+Linux GUI builds may require common desktop packages for Slint's native backend, such as X11, Wayland, OpenGL, and fontconfig development libraries.
 
 ## CLI Usage
 
@@ -147,6 +147,9 @@ The GUI lets you:
 - Select individual files for a single discovered link.
 - Start and cancel downloads.
 - View per-file progress and recent logs.
+- Toggle advanced settings from a compact side panel so the main flow stays clean.
+
+The Slint UI keeps the core workflow visible and folds low-frequency settings into the advanced panel to reduce visual noise.
 
 Settings are saved to the platform config directory, for example:
 

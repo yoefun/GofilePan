@@ -265,7 +265,7 @@ impl eframe::App for GofilePanApp {
         self.drain_messages();
 
         egui::TopBottomPanel::top("top")
-            .frame(section_frame(0.0))
+            .frame(section_frame(4.0))
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     ui.add_space(4.0);
@@ -924,6 +924,8 @@ fn status_chip(ui: &mut egui::Ui, status: &str, color: egui::Color32) {
 }
 
 fn apply_tech_theme(ctx: &egui::Context) {
+    ctx.set_fonts(load_fonts());
+
     let mut visuals = egui::Visuals::dark();
     visuals.override_text_color = Some(TEXT);
     visuals.widgets.noninteractive.bg_fill = PANEL_BG;
@@ -965,6 +967,43 @@ fn apply_tech_theme(ctx: &egui::Context) {
     style.spacing.menu_margin = egui::Margin::same(6.0);
     style.spacing.window_margin = egui::Margin::same(10.0);
     ctx.set_style(style);
+}
+
+fn load_fonts() -> egui::FontDefinitions {
+    let mut fonts = egui::FontDefinitions::default();
+    if let Some(font_bytes) = load_windows_cjk_font() {
+        fonts
+            .font_data
+            .insert("cjk".to_owned(), egui::FontData::from_owned(font_bytes));
+        if let Some(family) = fonts.families.get_mut(&egui::FontFamily::Proportional) {
+            family.push("cjk".to_owned());
+        }
+        if let Some(family) = fonts.families.get_mut(&egui::FontFamily::Monospace) {
+            family.push("cjk".to_owned());
+        }
+    }
+    fonts
+}
+
+fn load_windows_cjk_font() -> Option<Vec<u8>> {
+    if cfg!(target_os = "windows") {
+        let windir = std::env::var("WINDIR").unwrap_or_else(|_| "C:\\Windows".to_string());
+        let candidates = [
+            "Fonts\\msyh.ttc",
+            "Fonts\\msyh.ttf",
+            "Fonts\\simhei.ttf",
+            "Fonts\\simsun.ttc",
+            "Fonts\\msjh.ttc",
+            "Fonts\\microsoftyahei.ttf",
+        ];
+        for candidate in candidates {
+            let path = PathBuf::from(&windir).join(candidate);
+            if let Ok(bytes) = std::fs::read(&path) {
+                return Some(bytes);
+            }
+        }
+    }
+    None
 }
 
 fn section_frame(top_margin: f32) -> egui::Frame {
